@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { trackEvent } from "../analytics/pendo";
+import { ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 
 /** Signs a user in with their email and password against the Tripwise API. */
@@ -24,8 +26,12 @@ export function SignInPage() {
     try {
       await signIn(email.trim(), password);
       navigate(from, { replace: true });
-    } catch {
+    } catch (e) {
       setError("That email and password don't match an account.");
+      // Sign-in friction: the error message is shown. Never send the email or password.
+      trackEvent("Sign-in failed", {
+        http_status: e instanceof ApiError ? e.status : 0,
+      });
     } finally {
       setSigningIn(false);
     }

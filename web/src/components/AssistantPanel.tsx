@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from "react";
+import { trackEvent } from "../analytics/pendo";
 import { sendAssistantMessage, type ChatMessage } from "../api/assistant";
+import { ApiError } from "../api/client";
 
 const SUGGESTED_PROMPTS = [
   "Suggest a 3-day itinerary for my next trip",
@@ -32,11 +34,30 @@ export function AssistantPanel({ onClose }: { onClose: () => void }) {
     setDraft("");
     setError(null);
     setThinking(true);
+    const promptSource = SUGGESTED_PROMPTS.includes(prompt) ? "suggested" : "typed";
+    const startedAt = Date.now();
     try {
       const reply = await sendAssistantMessage(conversationId, conversation);
       setMessages((current) => [...current, reply.message]);
+      // The LLM reply came back and was added to the conversation.
+      trackEvent("Assistant replied", {
+        conversation_id: conversationId,
+        message_count: conversation.length + 1,
+        prompt_source: promptSource,
+        prompt_length: prompt.length,
+        reply_length: reply.message.content.length,
+        duration_ms: Date.now() - startedAt,
+      });
     } catch (e) {
       setError((e as Error).message);
+      // The chat request failed and the error shows in the panel.
+      trackEvent("Assistant reply failed", {
+        conversation_id: conversationId,
+        message_count: conversation.length,
+        prompt_source: promptSource,
+        http_status: e instanceof ApiError ? e.status : 0,
+        duration_ms: Date.now() - startedAt,
+      });
     } finally {
       setThinking(false);
     }
